@@ -1,0 +1,3 @@
+# Offline mode needs no packages.
+# Live mode (python -m synergyrca.live) needs:
+kubernetes>=28.1.0

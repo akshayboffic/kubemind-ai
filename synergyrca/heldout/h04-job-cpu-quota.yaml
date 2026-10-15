@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: h04
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: cpu-only
+  namespace: h04
+spec:
+  hard:
+    requests.cpu: "100m"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: batch
+  namespace: h04
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: batch
+          image: busybox
+          command: ["sleep", "60"]
+          resources:
+            requests:
+              cpu: "500m"

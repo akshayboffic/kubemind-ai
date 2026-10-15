@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KubeMind AI - Incident Dashboard</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f4f6f9;color:#1d2433;font-size:14px}
+header{background:#1d2b4f;color:#fff;padding:12px 20px;display:flex;justify-content:space-between;align-items:center}
+header h1{font-size:18px;margin:0}
+header .sub{font-size:12px;opacity:.8}
+.filters{background:#fff;padding:10px 20px;border-bottom:1px solid #dde2ea;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.filters label{font-size:12px;color:#5a6478;display:flex;gap:6px;align-items:center}
+select,input{padding:5px 8px;border:1px solid #c5ccd8;border-radius:4px;font-size:13px}
+.layout{display:flex;height:calc(100vh - 110px);min-height:520px}
+.list{width:340px;background:#fff;border-right:1px solid #dde2ea;overflow-y:auto}
+.list-title{padding:12px 16px;font-size:12px;font-weight:600;color:#5a6478;border-bottom:1px solid #dde2ea}
+.item{padding:12px 16px;border-bottom:1px solid #eef1f5;cursor:pointer;border-left:3px solid transparent}
+.item:hover{background:#f7f9fc}
+.item.active{background:#e8efff;border-left-color:#2f5fd0}
+.item .id{font-weight:600;font-size:13px}
+.item .meta{color:#5a6478;font-size:12px;margin-top:4px}
+.detail{flex:1;overflow-y:auto;padding:20px 28px}
+.title{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.title h2{font-size:17px;margin:0}
+.badge{display:inline-block;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:600}
+.HIGH{background:#d9f5e3;color:#16703a}
+.MEDIUM{background:#fff1cc;color:#8a5a00}
+.LOW{background:#fde0e0;color:#a12626}
+.DIAGNOSED{background:#e3ebff;color:#2140a0}
+.NEEDS_REVIEW{background:#f1e3ff;color:#6a2aa0}
+.card{background:#fff;border:1px solid #dde2ea;border-radius:8px;padding:16px 18px;margin-bottom:16px}
+.card h3{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#5a6478}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #eef1f5;vertical-align:top}
+th{color:#5a6478;font-weight:600}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+pre{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;background:#f4f6f9;padding:10px;border-radius:6px;overflow-x:auto;white-space:pre-wrap;margin:0 0 10px}
+.pass{color:#16703a;font-weight:600}
+.fail{color:#a12626;font-weight:600}
+.btns button{padding:7px 14px;border-radius:5px;border:1px solid #2f5fd0;background:#2f5fd0;color:#fff;cursor:pointer;margin-right:8px;font-size:13px}
+.btns button.secondary{background:#fff;color:#2f5fd0}
+.btns button:disabled{opacity:.4;cursor:not-allowed}
+.note{font-size:12px;color:#5a6478;margin-top:10px}
+.empty{padding:40px;color:#5a6478;text-align:center}
+.banner{background:#fff8e1;border-bottom:1px solid #f0dca0;padding:6px 20px;font-size:12px;color:#7a5a00}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>KubeMind AI</h1>
+  <span class="sub">cluster: kind-local &middot; Root Cause Analysis Dashboard</span>
+</header>
+<div class="banner">Live data from synergyrca.live (dashboard/data.js). Refresh this page after new incidents. Remediation commands are suggestions and are never executed.</div>
+
+<div class="filters">
+  <label>Failure type
+    <select id="fType"><option value="all">All</option></select>
+  </label>
+  <label>Status
+    <select id="fStatus">
+      <option value="all">All</option>
+      <option value="DIAGNOSED">DIAGNOSED</option>
+      <option value="NEEDS_REVIEW">NEEDS_REVIEW</option>
+    </select>
+  </label>
+  <label>Confidence
+    <select id="fConf">
+      <option value="all">All</option>
+      <option value="HIGH">HIGH</option>
+      <option value="MEDIUM">MEDIUM</option>
+      <option value="LOW">LOW</option>
+    </select>
+  </label>
+  <label>Search
+    <input id="fSearch" type="text" placeholder="name, namespace, id">
+  </label>
+</div>
+
+<div class="layout">
+  <div class="list">
+    <div class="list-title" id="count"></div>
+    <div id="list"></div>
+  </div>
+  <div class="detail" id="detail"></div>
+</div>
+
+<script src="data.js"></script>
+<script>
+// ---------- Incidents from data.js (written by live mode) ----------
+const INCIDENTS = window.KUBEMIND_DATA || [];
+
+// ---------- State ----------
+let filtered = [];
+let selectedId = null;
+const decisions = {}; // id -> "approved" | "dismissed"
+
+// ---------- Helpers ----------
+const esc = s => String(s).replace(/[&<>"']/g, c =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + "…" : s; }
+
+// ---------- Filters ----------
+function populateFilters() {
+  const sel = document.getElementById("fType");
+  const reasons = [...new Set(INCIDENTS.map(i => i.reason))];
+  reasons.forEach(r => {
+    const o = document.createElement("option");
+    o.value = r; o.textContent = r;
+    sel.appendChild(o);
+  });
+}
+
+function applyFilters() {
+  const t = document.getElementById("fType").value;
+  const st = document.getElementById("fStatus").value;
+  const cf = document.getElementById("fConf").value;
+  const q = document.getElementById("fSearch").value.trim().toLowerCase();
+
+  filtered = INCIDENTS.filter(i =>
+    (t === "all" || i.reason === t) &&
+    (st === "all" || i.status === st) &&
+    (cf === "all" || i.confidence === cf) &&
+    (!q || (i.id + " " + i.object + " " + i.namespace + " " + i.subtype).toLowerCase().includes(q))
+  );
+
+  if (!filtered.find(i => i.id === selectedId)) {
+    selectedId = filtered.length ? filtered[0].id : null;
+  }
+  document.getElementById("count").textContent =
+    `INCIDENTS (${filtered.length} of ${INCIDENTS.length})`;
+  renderList();
+  renderDetail();
+}
+
+// ---------- List ----------
+function renderList() {
+  const list = document.getElementById("list");
+  if (!filtered.length) {
+    list.innerHTML = '<div class="empty">No incidents match these filters.</div>';
+    return;
+  }
+  list.innerHTML = filtered.map(i => `
+    <div class="item ${i.id === selectedId ? "active" : ""}" data-id="${esc(i.id)}">
+      <div class="id">${esc(i.id)}
+        <span class="badge ${esc(i.confidence)}">${esc(i.confidence)}</span></div>
+      <div class="meta">${esc(i.reason)} &middot; ${esc(i.subtype)}</div>
+      <div class="meta">${esc(i.namespace)} &middot; ${esc(i.time)}</div>
+    </div>`).join("");
+}
+
+// ---------- Graph (SVG) ----------
+function renderGraph(nodes) {
+  const w = 160, h = 72, gap = 46, pad = 16;
+  const width = nodes.length * w + (nodes.length - 1) * gap + pad * 2;
+  const height = h + pad * 2;
+  let s = `<svg viewBox="0 0 ${width} ${height}" width="100%" style="max-width:${width}px"
+     xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" fill="#8a94a8"/>
+      </marker>
+    </defs>`;
+
+  nodes.forEach((n, i) => {
+    const x = pad + i * (w + gap);
+    const y = pad;
+    if (i > 0) {
+      const x0 = pad + (i - 1) * (w + gap) + w;
+      const dash = n.missing ? 'stroke-dasharray="6,4"' : "";
+      s += `<line x1="${x0}" y1="${y + h / 2}" x2="${x - 3}" y2="${y + h / 2}"
+             stroke="#8a94a8" stroke-width="2" marker-end="url(#arr)" ${dash}/>`;
+    }
+    const fill = n.missing ? "#fde0e0" : n.external ? "#e0f5ea" : "#e3ebff";
+    const stroke = n.root ? "#a12626" : "#9aa6bd";
+    const sw = n.root ? 3 : 1.5;
+    const dash = n.missing ? 'stroke-dasharray="6,4"' : "";
+    s += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8"
+           fill="${fill}" stroke="${stroke}" stroke-width="${sw}" ${dash}/>`;
+    s += `<text x="${x + w / 2}" y="${y + 26}" text-anchor="middle" font-size="12"
+           font-weight="600" fill="#1d2433">${esc(n.kind)}</text>`;
+    s += `<text x="${x + w / 2}" y="${y + 47}" text-anchor="middle" font-size="11"
+           font-family="monospace" fill="#3a4357">${esc(truncate(n.name, 22))}</text>`;
+    if (n.root) {
+      s += `<text x="${x + w / 2}" y="${y + h + 12}" text-anchor="middle" font-size="10"
+             fill="#a12626" font-weight="600">ROOT CAUSE</text>`;
+    }
+  });
+  s += "</svg>";
+  return s;
+}
+
+// ---------- Detail ----------
+function renderDetail() {
+  const box = document.getElementById("detail");
+  const inc = INCIDENTS.find(i => i.id === selectedId);
+  if (!inc) {
+    box.innerHTML = '<div class="empty">Select an incident to see its diagnosis.</div>';
+    return;
+  }
+  const decision = decisions[inc.id];
+  const statusNote = decision === "approved"
+    ? "Marked as approved. Nothing was executed. Apply the command manually after review."
+    : decision === "dismissed"
+      ? "Dismissed. No action will be taken."
+      : "Human approval is required before any fix is applied.";
+
+  box.innerHTML = `
+    <div class="title">
+      <h2>${esc(inc.id)}</h2>
+      <span class="badge ${esc(inc.status)}">${esc(inc.status)}</span>
+      <span class="badge ${esc(inc.confidence)}">Confidence: ${esc(inc.confidence)}</span>
+    </div>
+
+    <div class="card">
+      <h3>Symptom</h3>
+      <div>${esc(inc.reason)} / ${esc(inc.subtype)} &middot;
+        <span class="mono">${esc(inc.object)}</span> in namespace
+        <span class="mono">${esc(inc.namespace)}</span></div>
+      <div class="note">Detected ${esc(inc.time)} &middot; Method: ${esc(inc.method)}</div>
+      <pre>${esc(inc.message)}</pre>
+    </div>
+
+    <div class="card">
+      <h3>Root cause</h3>
+      <div>${esc(inc.rootCause)}</div>
+    </div>
+
+    <div class="card">
+      <h3>Graph path</h3>
+      ${renderGraph(inc.graph)}
+    </div>
+
+    <div class="card">
+      <h3>Evidence</h3>
+      <table>
+        <tr><th>Resource</th><th>Field</th><th>Value</th></tr>
+        ${inc.evidence.map(e => `<tr>
+          <td class="mono">${esc(e[0])}</td>
+          <td class="mono">${esc(e[1])}</td>
+          <td>${esc(e[2])}</td></tr>`).join("")}
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>Checks</h3>
+      <table>
+        ${inc.checks.map(c => `<tr>
+          <td>${esc(c[0])}</td>
+          <td class="${c[1] ? "pass" : "fail"}">${c[1] ? "OK" : "PROBLEM"}</td></tr>`).join("")}
+      </table>
+    </div>
+
+    ${inc.logTail && inc.logTail.length ? `<div class="card">
+      <h3>Container log (last lines, evidence only)</h3>
+      <pre>${esc(inc.logTail.join("\n"))}</pre>
+    </div>` : ""}
+
+    <div class="card">
+      <h3>Suggested remediation (not executed)</h3>
+      <pre>${esc(inc.fix.join("\n"))}</pre>
+      ${inc.dryRun ? `<div class="note"><b>Dry-run result (server-side, nothing applied):</b></div>
+      <pre>${esc(inc.dryRun)}</pre>` : ""}
+      <div class="btns">
+        <button id="btnApprove" ${decision ? "disabled" : ""}>Approve for manual run</button>
+        <button id="btnDismiss" class="secondary" ${decision ? "disabled" : ""}>Dismiss</button>
+      </div>
+      <div class="note">${esc(statusNote)}</div>
+    </div>
+  `;
+
+  const a = document.getElementById("btnApprove");
+  const d = document.getElementById("btnDismiss");
+  if (a) a.onclick = () => { decisions[inc.id] = "approved"; renderDetail(); };
+  if (d) d.onclick = () => { decisions[inc.id] = "dismissed"; renderDetail(); };
+}
+
+// ---------- Wiring ----------
+document.getElementById("list").addEventListener("click", e => {
+  const item = e.target.closest(".item");
+  if (!item) return;
+  selectedId = item.dataset.id;
+  renderList();
+  renderDetail();
+});
+["fType", "fStatus", "fConf"].forEach(id =>
+  document.getElementById(id).addEventListener("change", applyFilters));
+document.getElementById("fSearch").addEventListener("input", applyFilters);
+
+populateFilters();
+applyFilters();
+</script>
+</body>
+</html>

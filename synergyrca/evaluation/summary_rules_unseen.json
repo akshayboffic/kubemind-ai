@@ -1,0 +1,14 @@
+{
+  "mode": "rules",
+  "set": "unseen",
+  "cases": 6,
+  "diagnosable_cases": 4,
+  "unknown_cases": 2,
+  "precision": 1.0,
+  "recall": 0.25,
+  "unknown_handled_correctly": 1.0,
+  "wrong_confident": 0,
+  "missed": 3,
+  "llm_calls": 0,
+  "avg_seconds": 0.0
+}

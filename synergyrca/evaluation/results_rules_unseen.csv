@@ -1,0 +1,7 @@
+case,expected,got,status,outcome,llm_calls,seconds
+unseen-service-account-missing,ServiceAccount,unknown,NEEDS_REVIEW,missed,0,0.0
+unseen-namespace-terminating,Namespace,unknown,NEEDS_REVIEW,missed,0,0.0
+unseen-storageclass-missing,StorageClass,unknown,NEEDS_REVIEW,missed,0,0.0
+unseen-liveness-probe-failed,unknown,unknown,NEEDS_REVIEW,correct_unknown,0,0.0
+unseen-insufficient-cpu,unknown,unknown,NEEDS_REVIEW,correct_unknown,0,0.0
+unseen-memory-quota-full,ResourceQuota,ResourceQuota,DIAGNOSED,correct,0,0.0002

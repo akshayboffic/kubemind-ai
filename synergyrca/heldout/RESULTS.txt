@@ -1,0 +1,3 @@
+# One line per case, written after reading the live report. Format:
+# H01 expected=<kind|unknown> got=<kind|unknown> status=<DIAGNOSED|NEEDS_REVIEW> label=<label>
+# label: correct | correct_unknown | missed | wrong_confident

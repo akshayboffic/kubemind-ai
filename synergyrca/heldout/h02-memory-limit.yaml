@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: h02
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: hog
+  namespace: h02
+spec:
+  restartPolicy: Never
+  containers:
+    - name: hog
+      image: busybox
+      command: ["sh", "-c", "head -c 300m /dev/zero | tail"]
+      resources:
+        limits:
+          memory: 64Mi

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: h03
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pending-app
+  namespace: h03
+spec:
+  nodeSelector:
+    disktype: ssd-only
+  containers:
+    - name: app
+      image: nginx:1.27

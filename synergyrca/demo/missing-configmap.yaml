@@ -1,0 +1,18 @@
+# Reproduces the missing-ConfigMap incident: the ConfigMap is never created.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: es-crontab-job
+  namespace: demo-cm
+spec:
+  containers:
+    - name: es
+      image: busybox
+      command: ["sleep", "120"]
+      volumeMounts:
+        - name: list
+          mountPath: /list
+  volumes:
+    - name: list
+      configMap:
+        name: gen-white-list-conf
